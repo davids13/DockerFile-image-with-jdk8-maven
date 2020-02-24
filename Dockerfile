@@ -56,18 +56,38 @@ RUN mkdir -p /usr/share/maven /usr/share/maven/ref >> /dev/null && \
 ENV MAVEN_HOME /usr/share/maven
 ENV MAVEN_CONFIG "$USER_HOME_DIR/.m2"
 
+# Run the command inside your image filesystem
 RUN mkdir -p /opt/app
 # Copy the file from your host to your current location
 COPY . /opt/app
 # Set the working directory
 WORKDIR /opt/app
-# Run the command inside your image filesystem
+
 RUN mvn clean install
 
 RUN echo "Installing payara"
+ENV PAYARA_PATH /opt/payara
+RUN mkdir -p ${PAYARA_PATH}/deployments && \
+    useradd -d ${PAYARA_PATH} payara && echo payara:payara | chpasswd && \
+    chown -R payara:payara /opt/payara
+ENV PAYARA_PKG=https://s3-eu-west-1.amazonaws.com/payara.fish/payara-5-micro-prerelease.jar
+ENV PAYARA_VERSION=prerelease
+ENV PKG_FILE_NAME=payara-micro.jar
+
+RUN wget --quiet -O ${PAYARA_PATH}/${PKG_FILE_NAME} ${PAYARA_PKG} >> /dev/null
+ENV DEPLOY_DIR=${PAYARA_PATH}/deployments
+ENV AUTODEPLOY_DIR=${PAYARA_PATH}/deployments
+ENV PAYARA_MICRO_JAR=${PAYARA_PATH}/PKG_FILE_NAME
+
+COPY --from=build /opt/app/javaProjectName/target/javaProjectName.war ${AUTODEPLOY_DIR}
+
+USER payara
+WORKDIR ${PAYARA_PATH}
 
 # Inform Docker that the container is listening on the specified port at runtime.
-#EXPOSE 8080
+EXPOSE 8080
+
+ENTRYPOINT ["java", "-jar", "/opt/payara/payara-micro.jar", "--deploymentDir", "/opt/payara/deployments"]
 
 # Run the specified command within the container.
 #CMD [ "executable" ]
